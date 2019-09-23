@@ -1,0 +1,10 @@
+(library
+ (name DbSlow)
+ (modules somelib))
+
+(library
+ (name AQL)
+ (modules AQL QLLex QLParser))
+
+(ocamllex QLLex)
+(menhir (modules QLParser))

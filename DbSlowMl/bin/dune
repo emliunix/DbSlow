@@ -1,0 +1,5 @@
+(executable
+ (public_name DbSlow)
+ (name main)
+ (libraries DbSlow core)
+ (preprocess (pps ppx_deriving.std)))

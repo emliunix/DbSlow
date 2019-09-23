@@ -1,0 +1,8 @@
+lib: [
+  "_build/install/default/lib/DbSlow/META"
+  "_build/install/default/lib/DbSlow/dune-package"
+  "_build/install/default/lib/DbSlow/opam"
+]
+bin: [
+  "_build/install/default/bin/DbSlow"
+]
