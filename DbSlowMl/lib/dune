@@ -1,10 +1,10 @@
 (library
- (name DbSlow)
- (modules somelib))
-
-(library
  (name AQL)
- (modules AQL AIL QLLex QLParser))
+ (modules AQL AIL QLLex QLParser QLToken)
+ (preprocess (pps ppx_deriving.std)))
 
 (ocamllex QLLex)
-(menhir (modules QLParser))
+(menhir
+ (flags (--external-tokens AQL__QLToken))
+ (infer)
+ (modules QLParser))

@@ -1,6 +1,6 @@
 {
   open Option
-  type token = QLParser.token
+  type token = QLToken.token
 
   exception SyntaxError of string
 
@@ -31,10 +31,15 @@ rule qparse =
       | Some v -> v
       | None -> IDENT s
     }
+  | ',' { COMMA }
   | '=' { EQUAL }
   | "<>" { NEQUAL }
   | '(' { LPAREN }
   | ')' { RPAREN }
+  | '+' { PLUS }
+  | '-' { MINUS }
+  | '/' { DIVIDE }
+  | '*' { MULTIPLY }
   | int_lit { INTEGER (int_of_string (Lexing.lexeme lexbuf)) }
   | _ { raise (SyntaxError (
           let pos = lexbuf.lex_curr_p in

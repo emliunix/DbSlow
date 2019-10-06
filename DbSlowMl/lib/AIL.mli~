@@ -1,0 +1,6 @@
+type AIL =
+  (* Logical Nodes *)
+  | Projection of AIL
+  (*  *)
+
+;;

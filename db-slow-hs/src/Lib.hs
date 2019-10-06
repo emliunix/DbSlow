@@ -1,4 +1,4 @@
-{-# LANGUAGE KindSignatures, RankNTypes #-}
+{-# LANGUAGE KindSignatures, RankNTypes, FlexibleInstances, GADTs #-}
 module Lib
     ( parseExpr
     , someFunc
@@ -208,3 +208,45 @@ testTracing = let exprOpt = parseString parseExpr mempty "a + 2 * plus(3, c) - 1
 -- div
 -- sub
 --
+
+-- >>> :i Foldable
+-- class Foldable (t :: * -> *) where
+--   Data.Foldable.fold :: Monoid m => t m -> m
+--   foldMap :: Monoid m => (a -> m) -> t a -> m
+--   foldr :: (a -> b -> b) -> b -> t a -> b
+--   Data.Foldable.foldr' :: (a -> b -> b) -> b -> t a -> b
+--   foldl :: (b -> a -> b) -> b -> t a -> b
+--   Data.Foldable.foldl' :: (b -> a -> b) -> b -> t a -> b
+--   foldr1 :: (a -> a -> a) -> t a -> a
+--   foldl1 :: (a -> a -> a) -> t a -> a
+--   Data.Foldable.toList :: t a -> [a]
+--   null :: t a -> Bool
+--   length :: t a -> Int
+--   elem :: Eq a => a -> t a -> Bool
+--   maximum :: Ord a => t a -> a
+--   minimum :: Ord a => t a -> a
+--   sum :: Num a => t a -> a
+--   product :: Num a => t a -> a
+--   {-# MINIMAL foldMap | foldr #-}
+--   	-- Defined in ‘Data.Foldable’
+-- instance Foldable [] -- Defined in ‘Data.Foldable’
+-- instance Foldable Maybe -- Defined in ‘Data.Foldable’
+-- instance Foldable (Either a) -- Defined in ‘Data.Foldable’
+-- instance Foldable ((,) a) -- Defined in ‘Data.Foldable’
+--
+
+-- class Show t => ExprType t where
+
+-- instance ExprType Integer where
+
+-- instance ExprType [Char] where
+
+-- instance ExprType Bool where
+
+-- data ExprType t => TypedExpr t where
+--     TypedLit   :: ExprType t => t -> TypedExpr t
+--     TypedCol   :: ExprType t => [String] -> TypedExpr t
+--     Cast       :: (ExprType a, ExprType b) => TypedExpr a -> TypedExpr b
+--     TypedCompu :: ExprType t => Op -> [TypedExpr t] -> TypedExpr t
+--     TypedApp   :: (ExprType a, ExprType t) => String -> [TypedExpr a] -> TypedExpr t
+--     deriving (Show)

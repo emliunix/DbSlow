@@ -50,10 +50,13 @@ column:
 
 expr:
   | l = lit { IL.Lit l }
-  | c = column { IL.Col c }
+  | c = column_expr { IL.Col c }
   | e1 = expr; op = bin_op; e2 = expr {
                                      IL.Arith (IL.UnknownType, op, [e1; e2])
                                    }
+
+column_expr:
+  | c = column { IL.column { } }
 
 lit:
   | number
