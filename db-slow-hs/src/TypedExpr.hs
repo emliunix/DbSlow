@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module TypedExpr 
     ( TypeTag(..)
     , TypedExpr(..)
@@ -9,9 +10,10 @@ module TypedExpr
     , OpPolyDef(..)
     , opDefs
     , opDefLookup
-    , castDef
+    , castDefs
     , valType
     , typeCheck
+    , evalTypedExpr
     ) where
 
 import Data.List
@@ -60,6 +62,9 @@ data Op
     | Divide
     | Equal
     | GreatThan
+    | GreatThanEqual
+    | LessThan
+    | LessThanEqual
     | And
     | Or
     | Not
@@ -85,21 +90,122 @@ data OpPolyDef = OpPolyDef
 
 data OpDef = OpDef
     { opDefOp :: Op
-    , opDefPriority :: Int
-    , opDefSymbol :: String
     , opDefPolyDefs :: [OpPolyDef]
     }
 
-mkMonoTypeBinOp :: Op -> Int -> String -> [(TypeTag, [Val] -> Val)] -> OpDef
-mkMonoTypeBinOp op priority symbol typeAndFuns = OpDef
+primOps :: [(Op, Int, String, [([TypeTag], TypeTag, [Val] -> Val)])]
+primOps =
+    [ (Plus, 1, "+",
+        [ ([IntType, IntType], IntType, \case
+            [IntVal i1, IntVal i2] -> IntVal $ i1 + i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], DoubleType, \case
+            [DoubleVal d1, DoubleVal d2] -> DoubleVal $ d1 + d2
+            _ -> NullVal)
+        ])
+    , (Minus, 1, "-",
+        [ ([IntType, IntType], IntType, \case
+            [IntVal i1, IntVal i2] -> IntVal $ i1 - i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], DoubleType, \case
+            [DoubleVal d1, DoubleVal d2] -> DoubleVal $ d1 - d2
+            _ -> NullVal)
+        ])
+    , (Multiply, 2, "*",
+        [ ([IntType, IntType], IntType, \case
+            [IntVal i1, IntVal i2] -> IntVal $ i1 * i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], DoubleType, \case
+            [DoubleVal d1, DoubleVal d2] -> DoubleVal $ d1 * d2
+            _ -> NullVal)
+        ])
+    , (Divide, 2, "/",
+        [ ([IntType, IntType], DoubleType, \case
+            [IntVal i1, IntVal i2] | i2 /= 0 -> DoubleVal $ (fromIntegral i1) / (fromIntegral i2)
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], DoubleType, \case
+            [DoubleVal d1, DoubleVal d2] | d2 /= 0.0 -> DoubleVal $ d1 / d2
+            _ -> NullVal)
+        ])
+    , (Equal, 2, "=",
+        [ ([IntType, IntType], BoolType, \case
+            [IntVal i1, IntVal i2] -> BoolVal $ i1 == i2
+            _ -> NullVal)
+        , ([DoubleType, DoubleType], BoolType, \case
+            [DoubleVal d1, DoubleVal d2] -> BoolVal $ d1 == d2
+            _ -> NullVal)
+        , ([BoolType, BoolType], BoolType, \case
+            [BoolVal b1, BoolVal b2] -> BoolVal $ b1 == b1
+            _ -> NullVal)
+        , ([StringType, StringType], BoolType, \case
+            [StringVal s1, StringVal s2] -> BoolVal $ s1 == s2
+            _ -> NullVal)
+        ])
+    , (GreatThan, 2, ">",
+        [ ([IntType, IntType], BoolType, \case
+            [IntVal i1, IntVal i2] -> BoolVal $ i1 > i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], BoolType, \case
+            [DoubleVal d1, DoubleVal d2] -> BoolVal $ d1 > d2
+            _ -> NullVal)
+        ])
+    , (GreatThanEqual, 2, ">=",
+        [ ([IntType, IntType], BoolType, \case
+            [IntVal i1, IntVal i2] -> BoolVal $ i1 >= i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], BoolType, \case
+            [DoubleVal d1, DoubleVal d2] -> BoolVal $ d1 >= d2
+            _ -> NullVal)
+        ])
+    , (LessThan, 2, "<",
+        [ ([IntType, IntType], BoolType, \case
+            [IntVal i1, IntVal i2] -> BoolVal $ i1 < i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], BoolType, \case
+            [DoubleVal d1, DoubleVal d2] -> BoolVal $ d1 < d2
+            _ -> NullVal)
+        ])
+    , (LessThanEqual, 2, "<=",
+        [ ([IntType, IntType], BoolType, \case
+            [IntVal i1, IntVal i2] -> BoolVal $ i1 <= i2
+            _ -> NullVal
+            )
+        , ([DoubleType, DoubleType], BoolType, \case
+            [DoubleVal d1, DoubleVal d2] -> BoolVal $ d1 <= d2
+            _ -> NullVal)
+        ])
+    , (And, 2, "and",
+        [ ([BoolType, BoolType], BoolType, \case
+            [BoolVal i1, BoolVal i2] -> BoolVal $ i1 && i2
+            _ -> NullVal)
+            ])
+    , (Or, 2, "or",
+        [ ([BoolType, BoolType], BoolType, \case
+            [BoolVal i1, BoolVal i2] -> BoolVal $ i1 || i2
+            _ -> NullVal)
+        ])
+    ]
+
+primOps2 :: [(Op, Int, String, [([TypeTag], TypeTag, [Val] -> Val)])]
+primOps2 =
+    [
+    ]
+
+mkPrimOp :: (Op, Int, String, [([TypeTag], TypeTag, [Val] -> Val)]) -> OpDef
+mkPrimOp (op, _, _, typeAndFuns) = OpDef
     { opDefOp = op
-    , opDefPriority = priority
-    , opDefSymbol = symbol
     , opDefPolyDefs =
         fmap
-            (\(typeTag, opFun) -> OpPolyDef
-                { opPolyDefArgTypes = [typeTag, typeTag]
-                , opPolyDefRetType = typeTag
+            (\(argTypes, retType, opFun) -> OpPolyDef
+                { opPolyDefArgTypes = argTypes
+                , opPolyDefRetType = retType
                 , opPolyDefEvalFun = opFun
                 })
             typeAndFuns
@@ -107,27 +213,7 @@ mkMonoTypeBinOp op priority symbol typeAndFuns = OpDef
 
 opDefs :: [OpDef]
 opDefs =
-    [ mkMonoTypeBinOp Plus 1 "+"
-        [ (IntType, \x -> case x of
-            [(IntVal i1), (IntVal i2)] -> (IntVal $ i1 + i2)
-            _ -> NullVal)
-        , (DoubleType, \x -> case x of
-            [(DoubleVal i1), (DoubleVal i2)] -> (DoubleVal $ i1 + i2)
-            _ -> NullVal)
-        ]
-    , mkMonoTypeBinOp Minus 1 "-"
-        [ (IntType, \[(IntVal i1), (IntVal i2)] ->v (IntVal $ i1 - i2))
-        , (DoubleType, \[(DoubleVal i1), (DoubleVal i2)] -> (DoubleVal $ i1 - i2))
-        ]
-    , mkMonoTypeBinOp Multiply 2 "*"
-        [ (IntType, \[(IntVal i1), (IntVal i2)] -> (IntVal $ i1 * i2))
-        , (DoubleType, \[(DoubleVal i1), (DoubleVal i2)] -> (DoubleVal $ i1 * i2))
-        ]
-    , mkMonoTypeBinOp Divide 2 "/"
-        [ (IntType, \[(IntVal i1), (IntVal i2)] -> (IntVal $ i1 `div` i2))
-        , (DoubleType, \[(DoubleVal i1), (DoubleVal i2)] -> (DoubleVal $ i1 / i2))
-        ]
-    ] ++ (mkCasts allCasts)
+    (fmap mkPrimOp primOps) ++ (fmap mkCastOp castDefs)
 
 opDefLookup :: Op -> Maybe OpDef
 opDefLookup op =
@@ -146,12 +232,20 @@ newtype CastDef = CastDef (CastKind, TypeTag, TypeTag, [Val] -> Val)
 
 castDefs :: [CastDef]
 castDefs =
-    [ (Implicit, IntType, DoubleType, \(IntVal i1) -> (DoubleVal $ ((fromIntegral i1) :: Double)))
-    , (Explicit, DoubleType, IntType, \(IntVal i1) -> (DoubleVal $ ((fromIntegral i1) :: Double)))
+    [ CastDef (Implicit, IntType, DoubleType, \case
+        [(IntVal i1)] -> (DoubleVal $ ((fromIntegral i1) :: Double))
+        _ -> NullVal)
+    , CastDef (Explicit, DoubleType, IntType, \case
+        [(IntVal i1)] -> (DoubleVal $ ((fromIntegral i1) :: Double))
+        _ -> NullVal)
     ]
 
+-- opDefs
+-- implicitCastDefs
+-- funDefs
+
 mkCastOp :: CastDef -> OpDef
-mkCastOp (k, tf, tt, f) = OpDef
+mkCastOp (CastDef (_, tf, tt, f)) = OpDef
     { opDefOp = Cast tf tt
     , opDefPolyDefs =
         [ OpPolyDef
@@ -165,23 +259,27 @@ mkCastOp (k, tf, tt, f) = OpDef
 -- for simplicity, maybe omit implicit casting
 -- cast can only be triggered with CAST( AS )
 
-implicitCasts :: TypeTag -> TypeTag -> Maybe (TypedExpr -> TypedExpr)
+implicitCastLookup :: TypeTag -> TypeTag -> Maybe (TypedExpr -> TypedExpr)
 -- castDef StringType IntType = Just $ \(StrintVal v) -> (IntVal $ fromString v)
 -- castDef IntType DoubleType = Just $ \(IntVal v) -> (DoubleVal $ ((fromIntegral v) :: Double))
-implicitCasts tFrom tTo =
-    case find
-        (\x -> case x of
-            (Implicit, tF, tT, _) -> tF == tFrom && tT == tTo
-            _ -> False)
-        castDefs
-    of
-        Just (_, _, _, f) -> Just $ (\e -> TypedExpr
-                { typedExprTypeTag = tTo
-                , typedExprE = TApp (Cast tFrom tTo) [e] f
-                }
-            )
+implicitCastLookup tFrom tTo = do
+    {
+        CastDef (_, _, _, f) <- find
+            (\case
+                CastDef (Implicit, tF, tT, _) -> tF == tFrom && tT == tTo
+                _ -> False)
+            castDefs
+        ;
+        return (\e -> TypedExpr
+            { typedExprTypeTag = tTo
+            , typedExprE = TApp (Cast tFrom tTo) [e] (OpFun f)
+            }
+        )
+    }
 
 -- >>> Lit $ StringVal "xxxxx"
+-- Lit (StringVal "xxxxx")
+--
 
 valType :: Val -> TypeTag
 valType NullVal = UnknownType
@@ -196,7 +294,7 @@ addCast :: TypedExpr -> TypeTag -> Maybe TypedExpr
 addCast expr toType
     | (typedExprTypeTag expr) == toType = Just expr
     | (typedExprTypeTag expr) /= toType =
-        case implicitCasts (typedExprTypeTag expr) toType of
+        case implicitCastLookup (typedExprTypeTag expr) toType of
             Just f -> Just $ f expr
             Nothing -> Nothing
     | otherwise = Nothing
@@ -224,17 +322,17 @@ typeCheck colTypeLookup expr =
                 Just opDef -> Right opDef
                 Nothing -> Left $ "Unknown op " ++ (show op));
             let matches = fmap (\opPoly -> (do {
-                    (opArgTypes, opRetType) <- return $ (opPolyDefArgTypes opPoly, opPolyDefRetType opPoly);
+                    (opArgTypes, opRetType, opFun) <- return $ (opPolyDefArgTypes opPoly, opPolyDefRetType opPoly, opPolyDefEvalFun opPoly);
                     -- add types to null values
                     typedArgs <- return $ fmap (\(t, e) -> inferNullType t e) (zip opArgTypes typedArgs);
                     -- typeCheck and add implicitCasts if neccessary
                     -- 1. typeCheck
                     -- 2. add implicit casts
                     -- 3. add OpFun
-                    (castedExprs, opFun) <- addCasts opArgTypes typedArgs;
+                    castedExprs <- addCasts opArgTypes typedArgs;
                     return $ TypedExpr
                         { typedExprTypeTag = opRetType
-                        , typedExprE = TApp op castedExprs opFun
+                        , typedExprE = TApp op castedExprs (OpFun opFun)
                         }
                 })) (opDefPolyDefs opDef)
             in case find isRight matches of
@@ -259,7 +357,7 @@ typeCheck colTypeLookup expr =
                     Nothing ->
                         let errMsg = "Cast Error: " ++ (show $ typedExprTypeTag a) ++ " -> " ++ (show t) ++ " for " ++ (show $ typedExprE a) in
                             (l, errMsg:r)
-        addCasts :: [TypeTag] -> [TypedExpr] -> Either String ([TypedExpr], OpFun)
+        addCasts :: [TypeTag] -> [TypedExpr] -> Either String [TypedExpr]
         addCasts toTypes args =
             let res = fmap (\(t, a) -> (addCast a t, t, a)) (zip toTypes args)
                 (vs, errs) = splitErr res
@@ -268,3 +366,12 @@ typeCheck colTypeLookup expr =
                     Right vs
                 else
                     Left $ intercalate "\n" errs
+
+
+evalTypedExpr :: (String -> Val) -> TypedExpr -> Val
+evalTypedExpr colValLookup expr =
+    case typedExprE expr of
+        TLit v -> v
+        TCol n -> colValLookup n
+        TApp _ exprs (OpFun f) ->
+            f $ fmap (evalTypedExpr colValLookup) exprs
