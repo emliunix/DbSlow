@@ -130,7 +130,17 @@ parseLit :: Parser SqlSimpleExpr
 parseLit = (\i -> SSimpleLit $ SVInt i) <$> integer
 
 parseCol :: Parser SqlSimpleExpr
-parseCol = (\s -> SSimpleCol $ foldl1 (\a b -> a ++ "." ++ b) s) <$> (token qualifiedColIdent)
+parseCol =
+    do
+        ids <- token qualifiedColIdent
+        case ids of
+            [] -> fail "invalid column"
+            [ident] -> return $ SSimpleCol Nothing ident
+            [ns, ident] -> return $ SSimpleCol (Just ns) ident
+            -- xs -> case reverse ids of
+            --     ident:rns -> return $ SSimpleCol (Just (foldl1 (\a b -> a ++ "." ++ b) (reverse rns))) ident
+            _ -> fail "invalid column"
+    <?> "column"
 
 parseFunCall :: Parser SqlSimpleExpr
 parseFunCall = try $ do
@@ -303,7 +313,7 @@ parseLimit = try $ do
     return $ SClsLimit n
 
 -- >>> parseString parseSelect mempty "select * from a where c > 0 and b < 1 order by d limit 100"
--- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleCol "*")],SClsFrom (SFromTable "a" Nothing),SClsWhere (SSimpleApp And [SSimpleApp GreaterThan [SSimpleCol "c",SSimpleLit (SVInt 0)],SSimpleApp LessThan [SSimpleCol "b",SSimpleLit (SVInt 1)]]),SClsOrderBy [("d",SOrderASC)],SClsLimit 100])
+-- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleCol Nothing "*")],SClsFrom (SFromTable "a" Nothing),SClsWhere (SSimpleApp And [SSimpleApp GreaterThan [SSimpleCol Nothing "c",SSimpleLit (SVInt 0)],SSimpleApp LessThan [SSimpleCol Nothing "b",SSimpleLit (SVInt 1)]]),SClsOrderBy [("d",SOrderASC)],SClsLimit 100])
 --
 
 -- >>> parseString parseExpr mempty "c > 0 and b < 1 order"

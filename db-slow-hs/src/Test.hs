@@ -1,23 +1,20 @@
 module Test where
 
-import TypedExpr
+import Expr.TypeInfer
+import Expr.Def
+import Def
+import PrimOps
 
--- **** test expressions ****
+primLookUpOp = lookUpOp primOpContext
 
-testExpr :: Expr
-testExpr = App Plus [Lit $ IntVal 3, Lit $ DoubleVal 3.1]
+testExpr :: SqlSimpleExpr
+testExpr = SSimpleApp Plus [(SSimpleCol Nothing "dub"), (SSimpleLit $ SVInt 3)]
 
-testExpr2 :: Expr
-testExpr2 = App Plus [Lit $ IntVal 3, Lit $ IntVal 4]
+colTypes _ col = case col of
+    "dub" -> STDouble
+    "str" -> STString
+    "int" -> STInt
 
-testCastExpr :: Expr
-testCastExpr = App Plus [App (Cast IntType DoubleType) [Lit $ IntVal 3], Lit $ DoubleVal 3.1];
-
-res :: String
-res = case typeCheck (\_ -> UnknownType) testExpr of
-    Right v -> show v
-    Left e -> e
-
--- >>> putStrLn res
--- TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TApp Plus [TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TApp (Cast IntType DoubleType) [TypedExpr {typedExprTypeTag = IntType, typedExprE = TLit (IntVal 3)}] fun},TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TLit (DoubleVal 3.1)}] fun}
+-- >>> typeCheck colTypes primLookUpOp testExpr
+-- Right (SqlExpr {sExprType = STDouble, sExprE = SEApp Plus fun [SqlExpr {sExprType = STDouble, sExprE = SECol Nothing "dub"},SqlExpr {sExprType = STDouble, sExprE = SEApp (Cast STInt STDouble) fun [SqlExpr {sExprType = STInt, sExprE = SELit (SVInt 3)}]}]})
 --

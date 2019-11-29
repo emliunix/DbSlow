@@ -1,7 +1,7 @@
 module Expr.Def where
 
 data SqlType
-    = STUnknown
+    = STUnknown -- only used for internal type inference
     | STString
     | STInt
     | STDouble
@@ -16,9 +16,16 @@ data SqlVal
     | SVNull
     deriving (Eq, Show)
 
+typeOfVal :: SqlVal -> SqlType
+typeOfVal (SVString _) = STString
+typeOfVal (SVInt _) = STInt
+typeOfVal (SVDouble _) = STDouble
+typeOfVal (SVBool _) = STBool
+typeOfVal SVNull = STUnknown
+
 data SqlExpr = SqlExpr
     { sExprType :: SqlType
-    , sExprExpr :: SqlExpr'
+    , sExprE :: SqlExpr'
     } deriving (Show)
 
 newtype OpFun = OpFun ([SqlVal] -> SqlVal)
@@ -28,7 +35,7 @@ instance Show OpFun where
 
 data SqlExpr'
     = SELit SqlVal
-    | SECol String
+    | SECol (Maybe String) String
     | SEApp Op OpFun [SqlExpr]
     deriving (Show)
 

@@ -1,10 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
-module PrimOps where
+module PrimOps
+    ( primOpContext
+    ) where
+
+import Data.List (find)
 
 import Expr.Def
     ( Op (..)
     , SqlType (..)
     , SqlVal (..)
+    , OpContext (..)
     )
 
 -- def: op, priority, symbol, association, variants
@@ -116,4 +121,20 @@ primOps =
             [SVBool i1, SVBool i2] -> SVBool $ i1 || i2
             _ -> SVNull)
         ])
+    , (Cast STInt STDouble,
+        [ ([STInt], STDouble, \case
+            [SVInt i1] -> SVDouble $ fromInteger i1)
+        ])
     ]
+
+primOpContext :: OpContext
+primOpContext = OpContext
+    { opCtxName = "prim"
+    , lookUpOp = \op ->
+        case find (\opDef -> opOfOpDef opDef == op) primOps of
+            Just (_, fns) -> fmap (\(argTypes, retType, fn) -> ("prim", argTypes, retType, fn)) fns
+            Nothing -> []
+    }
+
+opOfOpDef :: (Op, [([SqlType], SqlType, [SqlVal] -> SqlVal)]) -> Op
+opOfOpDef (op, _) = op

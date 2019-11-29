@@ -22,7 +22,7 @@ import Expr.Def
 
 data SqlSimpleExpr
     = SSimpleLit SqlVal
-    | SSimpleCol String
+    | SSimpleCol (Maybe String) String
     | SSimpleApp Op [SqlSimpleExpr]
     deriving (Show)
 
