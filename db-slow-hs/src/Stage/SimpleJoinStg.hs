@@ -1,0 +1,65 @@
+module Stage.SimpleJoinStg where
+
+-- data SimpleJoinCursor = SimpleJoinCursor { simpJoinCurLeft :: Cursor, simpJoinCurRight :: Cursor, simpJoinClosed :: Bool }
+
+-- instance RawCursor SimpleJoinCursor where
+--     rawCurNext = do
+--         x <- get
+--         let curLeft = simpJoinCurLeft x
+--             curRight = simpJoinCurRight x
+--             closed = simpJoinClosed x
+--             in if closed then
+--                     return Nothing
+--                 else do
+--                     (vLeft, curLeft') <- lift $ runStateT curNext curLeft
+--                     (vRight, curRight') <- lift $ runStateT curNext curRight
+--                     case (vLeft, vRight) of
+--                         (Nothing, _) -> do
+--                             (_, curRight') <- lift $ runStateT curClose curRight'
+--                             _updateCursors x curLeft' curRight' True
+--                             return Nothing
+--                         (_, Nothing) -> do
+--                             (_, curLeft') <- lift $ runStateT curClose curLeft'
+--                             _updateCursors x curLeft' curRight' True
+--                             return Nothing
+--                         (Just v1, Just v2) -> do
+--                             _updateCursors x curLeft' curRight' False
+--                             return $ Just $ v1 V.++ v2
+--         where
+--             _updateCursors :: SimpleJoinCursor -> Cursor -> Cursor -> Bool -> StateT SimpleJoinCursor IO ()
+--             _updateCursors cur curLeft' curRight' closed =
+--                 put cur
+--                     { simpJoinCurLeft = curLeft'
+--                     , simpJoinCurRight = curRight'
+--                     , simpJoinClosed = closed
+--                     }
+
+--     rawCurClose = do
+--         x <- get
+--         let curLeft = simpJoinCurLeft x
+--             curRight = simpJoinCurRight x
+--             in do
+--                 (_, curLeft') <- lift $ runStateT curClose curLeft
+--                 (_, curRight') <- lift $ runStateT curClose curRight
+--                 put x
+--                     { simpJoinCurLeft = curLeft'
+--                     , simpJoinCurRight = curRight'
+--                     }
+
+-- testJoinCur :: IO ()
+-- testJoinCur = do
+--     tCur3 <- stgNewCursor $ mkTestStg 3
+--     tCur5 <- stgNewCursor $ mkTestStg 5
+--     tCur7 <- stgNewCursor $ mkTestStg 7
+--     printCursor $ toCursor SimpleJoinCursor
+--         { simpJoinCurLeft = toCursor LimitCursor
+--                                         { limCurRemain = 7
+--                                         , limCurSrc = tCur3
+--                                         }
+--         , simpJoinCurRight = toCursor SimpleJoinCursor
+--                                         { simpJoinCurLeft = tCur5
+--                                         , simpJoinCurRight = tCur7
+--                                         , simpJoinClosed = False
+--                                         }
+--         , simpJoinClosed = False
+--         }

@@ -367,7 +367,6 @@ typeCheck colTypeLookup expr =
                 else
                     Left $ intercalate "\n" errs
 
-
 evalTypedExpr :: (String -> Val) -> TypedExpr -> Val
 evalTypedExpr colValLookup expr =
     case typedExprE expr of
@@ -375,3 +374,22 @@ evalTypedExpr colValLookup expr =
         TCol n -> colValLookup n
         TApp _ exprs (OpFun f) ->
             f $ fmap (evalTypedExpr colValLookup) exprs
+
+unifyAppExpr op ctx args = do
+    opFns <- return $ lookUpFns ctx op
+    argTypes <- return $ _argTypes args
+    case _tryDirectMatch opFns argTypes of
+        Just fn -> return $ mkApp op fn args
+        Nothing ->
+            let argTypesCands = fmap (\(fnArgTypes, t -> intersect fnArgTypes (t:_getCasts t)) $ zip (getFnArgTypes opFns) argTypes
+
+            in do
+                _searchMatch opFns argTypesCands
+    where
+        _searchMatch fns typeCands =
+            let maxIter = max $ fmap length typeCands
+            in
+                _searchMatch' [] typeCands 0
+                where
+                    _searchMatch' [] typeCands 0
+            

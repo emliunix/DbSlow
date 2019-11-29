@@ -14,10 +14,10 @@ testCastExpr :: Expr
 testCastExpr = App Plus [App (Cast IntType DoubleType) [Lit $ IntVal 3], Lit $ DoubleVal 3.1];
 
 res :: String
-res = case typeCheck (\_ -> UnknownType) testExpr2 of
+res = case typeCheck (\_ -> UnknownType) testExpr of
     Right v -> show v
     Left e -> e
 
 -- >>> putStrLn res
--- TypedExpr {typedExprTypeTag = IntType, typedExprE = TApp Plus [TypedExpr {typedExprTypeTag = IntType, typedExprE = TLit (IntVal 3)},TypedExpr {typedExprTypeTag = IntType, typedExprE = TLit (IntVal 4)}]}
+-- TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TApp Plus [TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TApp (Cast IntType DoubleType) [TypedExpr {typedExprTypeTag = IntType, typedExprE = TLit (IntVal 3)}] fun},TypedExpr {typedExprTypeTag = DoubleType, typedExprE = TLit (DoubleVal 3.1)}] fun}
 --
