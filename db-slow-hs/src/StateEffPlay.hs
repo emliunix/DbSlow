@@ -7,7 +7,6 @@ module StateEffPlay where
 import Control.Eff
 import Control.Eff.State.Lazy
 
-
 -- a stage exposes schema and [Row] where Row is [Val]
 -- and Row should satisfy schema
 

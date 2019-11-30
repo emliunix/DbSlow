@@ -1,5 +1,9 @@
 module Def
-    ( SqlSimpleExpr (..)
+    ( Schema (..)
+    , SqlColumn (..)
+    , SqlTableRepo (..)
+    , Row
+    , SqlSimpleExpr (..)
     , SqlStmt (..)
     , SqlClause (..)
     , isSelect
@@ -10,13 +14,29 @@ module Def
     , SqlFromSpec (..)
     , SqlOrderBy (..)
     , SqlJoinType (..)
+    , colsOfExpr
     , module Expr.Def
     ) where
 
 import Expr.Def
     ( Op (..)
     , SqlVal (..)
+    , SqlType (..)
     )
+
+data SqlColumn = SqlColumn
+    { sColName :: String
+    , sColType :: SqlType
+    } deriving (Show)
+
+data Schema = Schema
+    { schCols :: [SqlColumn]
+    , schName :: String
+    } deriving (Show)
+
+data SqlTableRepo = SqlTableRepo { lookUpTable :: String -> Maybe Schema }
+
+type Row = [SqlVal]
 
 -- For parser
 
@@ -69,3 +89,14 @@ data SqlJoinType
     | SJRight
     | SJOuter
     deriving (Eq, Show)
+
+--
+
+-- # Extract Column References From SimpleExpr #
+
+colsOfExpr :: SqlSimpleExpr -> [(Maybe String, String)]
+colsOfExpr expr =
+    case expr of
+        SSimpleLit _ -> []
+        SSimpleCol optNs col -> [(optNs, col)]
+        SSimpleApp _ exprs -> concat $ fmap colsOfExpr exprs

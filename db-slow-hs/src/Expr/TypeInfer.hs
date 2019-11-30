@@ -7,23 +7,28 @@ import Data.List (intercalate, sortBy, find)
 import Data.Maybe (catMaybes)
 import Data.Either (partitionEithers)
 import Control.Monad
+import Control.Monad.Except (runExcept, throwError, liftEither)
 
 import Expr.Def
 import Def
 
-typeCheck :: (Maybe String -> String -> SqlType) -> (Op -> [SqlFnTuple]) -> SqlSimpleExpr -> Either String SqlExpr
-typeCheck lookUpColType lookUpOp expr =
+type Result = Either String
+
+typeCheck :: (Maybe String -> String -> Result SqlColumn) -> (Op -> [SqlFnTuple]) -> SqlSimpleExpr -> Result SqlExpr
+typeCheck lookUpCol lookUpOp expr =
     case expr of
         SSimpleLit v -> return $ SqlExpr
             { sExprType = typeOfVal v
             , sExprE = SELit v
             }
-        SSimpleCol ns col -> return $ SqlExpr
-            { sExprType = lookUpColType ns col
-            , sExprE = SECol ns col
-            }
+        SSimpleCol ns col -> runExcept $ do
+            colDef <- liftEither $ lookUpCol ns col
+            return $ SqlExpr
+                { sExprType = sColType colDef
+                , sExprE = SECol ns col
+                }
         SSimpleApp op args ->
-            case partitionEithers $ fmap (typeCheck lookUpColType lookUpOp) args of
+            case partitionEithers $ fmap (typeCheck lookUpCol lookUpOp) args of
                 ([], typedArgs) ->
                     let argTypes = fmap sExprType typedArgs
                         opFns = lookUpOp op

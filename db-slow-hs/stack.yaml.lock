@@ -3,10 +3,24 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: extensible-effects-5.0.0.1@sha256:2ed0bee04c8bf334358147da6d92ff31e9fbbefceb75ef3e408a0d858aec0cc6,9013
+    pantry-tree:
+      size: 3306
+      sha256: 4c520f1ccb76ed1d304cb5967e6679e31c907d3c0ba5d7e4a459e827b9a08173
+  original:
+    hackage: extensible-effects-5.0.0.1
+- completed:
+    hackage: fused-effects-1.0.0.0@sha256:45119e0982e27aeda95aecb47a900ffe1e590a3f22c5c75ce05a2c775180a3fd,4726
+    pantry-tree:
+      size: 5286
+      sha256: c03d709d4bf964fe9c92bc0b87a92e4151b01228e3f9f682473d68aa8d0caa87
+  original:
+    hackage: fused-effects-1.0.0.0
 snapshots:
 - completed:
-    size: 523700
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/7.yaml
-    sha256: 8e3f3c894be74d71fa4bf085e0a8baae7e4d7622d07ea31a52736b80f8b9bb1a
-  original: lts-14.7
+    size: 525662
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/15.yaml
+    sha256: c5e673e5723931b64ef2eb5004f6d9ea3c95b58d48388dbc4de6f66b97c81f7a
+  original: lts-14.15

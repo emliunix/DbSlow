@@ -15,8 +15,10 @@ module Stage.Def
 import Data.List
 import Control.Monad.State.Lazy
 
+import Def (SqlColumn)
+
 data Schema = Schema
-    { schCols :: [String]
+    { schCols :: [SqlColumn]
     , schName :: String
     }
 

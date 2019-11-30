@@ -2,20 +2,22 @@ module Stage.TestStg
     ( mkTestStg
     ) where
 
+import Control.Monad.State.Lazy
+
 import Stage.Def
     ( Stage(..)
     , Schema(..)
     , Cursor
     , RawCursor (..)
     )
-import Control.Monad.State.Lazy
+import Def (SqlColumn (..), SqlType (..))
 
 -- # Test Cursor #
 
 mkTestStg :: Int -> Stage
 mkTestStg initVal = Stage
     { stgSchema = Schema
-                    { schCols = ["testVal"]
+                    { schCols = [SqlColumn { sColName = "test", sColType = STInt }]
                     , schName = "testStg"
                     }
     , stgNewCursor = return $ toCursor TestCursor { testIdx = initVal }
