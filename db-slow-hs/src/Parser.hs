@@ -218,7 +218,7 @@ addUnaryParser ops p = do
 parseSelect :: Parser SqlStmt
 parseSelect = try $ do
     keyword "select"
-    selCols <- many _parseSelCol
+    selCols <- commaSep _parseSelCol
     optFrom <- fmap Just parseFrom <|> return Nothing
     case optFrom of
         -- it's a singletonExprSelect: select 1 + 1

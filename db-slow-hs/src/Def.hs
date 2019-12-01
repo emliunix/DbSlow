@@ -1,9 +1,17 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Def
-    ( Schema (..)
+    ( Result
+    , ExceptS
+    -- Base Defs
     , SqlColumn (..)
+    , Schema (..)
+    , SqlTable (..)
     , SqlTableRepo (..)
     , Row
+    , FnLookUpCol
+    -- SQL Surface AST
     , SqlSimpleExpr (..)
+    , colsOfExpr
     , SqlStmt (..)
     , SqlClause (..)
     , isSelect
@@ -14,15 +22,31 @@ module Def
     , SqlFromSpec (..)
     , SqlOrderBy (..)
     , SqlJoinType (..)
-    , colsOfExpr
+    -- Stage and Cursor
+    , Stage (..)
+    , Cursor
+    , curNext
+    , curClose
+    , RawCursor (..)
+    , processCursor
+    , printCursor
+    , cursorToList
     , module Expr.Def
     ) where
+
+import Data.List (intersperse)
+import Control.Monad.State.Lazy
+import Control.Monad.Except (Except)
 
 import Expr.Def
     ( Op (..)
     , SqlVal (..)
     , SqlType (..)
     )
+
+type Result = Either String
+
+type ExceptS = Except String
 
 data SqlColumn = SqlColumn
     { sColName :: String
@@ -34,9 +58,78 @@ data Schema = Schema
     , schName :: String
     } deriving (Show)
 
-data SqlTableRepo = SqlTableRepo { lookUpTable :: String -> Maybe Schema }
+data SqlTable = SqlTable
+    { tblName :: String
+    , tblSchema :: Schema
+    , tblStage :: Stage
+    }
+
+data SqlTableRepo = SqlTableRepo { lookUpTable :: String -> Maybe SqlTable }
 
 type Row = [SqlVal]
+
+type FnLookUpCol = Maybe String -> String -> ExceptS (Int, SqlColumn)
+
+-- Stage Definitions
+
+data Stage = Stage { stgNewCursor :: IO Cursor }
+
+data Cursor = Cursor
+    { curNext' :: StateT Cursor IO (Maybe Row)
+    , curClose' :: StateT Cursor IO ()
+    }
+
+curNext :: StateT Cursor IO (Maybe Row)
+curNext = do
+    cn <- get
+    (curNext' cn)
+
+curClose :: StateT Cursor IO ()
+curClose = do
+    cn <- get
+    (curClose' cn)
+
+-- Cursor Utility
+
+processCursor :: (Row -> IO ()) -> Cursor -> IO ()
+processCursor act cur = evalStateT processCursor' cur
+    where
+        processCursor' = do
+            r <- curNext
+            case r of
+                Just r -> do
+                    lift $ act r
+                    processCursor'
+                Nothing -> return ()
+
+printCursor :: Cursor -> IO ()
+printCursor c = processCursor pr c
+    where
+        pr r = print $ foldl1 (++) $ intersperse ", " $ fmap show r
+
+cursorToList :: Cursor -> IO [Row]
+cursorToList cur = evalStateT (cursorToList' []) cur
+    where
+        cursorToList' out = do
+            r <- curNext
+            case r of
+                Just r -> do
+                    cursorToList' (r:out)
+                Nothing -> return $ reverse out
+
+-- Raw Cursor
+
+class RawCursor c where
+    rawCurNext :: StateT c IO (Maybe Row)
+    rawCurClose :: StateT c IO ()
+    toCursor :: c -> Cursor
+    toCursor c = Cursor (_wrap rawCurNext) (_wrap rawCurClose)
+        where
+            _wrap :: StateT c IO t -> StateT Cursor IO t
+            _wrap f = do
+                (r, c') <- lift $ runStateT f c
+                put $ toCursor c'
+                return r
 
 -- For parser
 
@@ -89,8 +182,6 @@ data SqlJoinType
     | SJRight
     | SJOuter
     deriving (Eq, Show)
-
---
 
 -- # Extract Column References From SimpleExpr #
 

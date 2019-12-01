@@ -30,6 +30,7 @@ dependencies:
 - cassava
 - vector
 - bytestring
+- ilist
 
 library:
   source-dirs: src

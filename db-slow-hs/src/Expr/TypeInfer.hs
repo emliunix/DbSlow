@@ -7,14 +7,12 @@ import Data.List (intercalate, sortBy, find)
 import Data.Maybe (catMaybes)
 import Data.Either (partitionEithers)
 import Control.Monad
-import Control.Monad.Except (runExcept, throwError, liftEither)
+import Control.Monad.Except (runExcept, throwError, liftEither, Except)
 
 import Expr.Def
 import Def
 
-type Result = Either String
-
-typeCheck :: (Maybe String -> String -> Result SqlColumn) -> (Op -> [SqlFnTuple]) -> SqlSimpleExpr -> Result SqlExpr
+typeCheck :: (Maybe String -> String -> ExceptS SqlColumn) -> (Op -> [SqlFnTuple]) -> SqlSimpleExpr -> Result SqlExpr
 typeCheck lookUpCol lookUpOp expr =
     case expr of
         SSimpleLit v -> return $ SqlExpr
@@ -22,7 +20,7 @@ typeCheck lookUpCol lookUpOp expr =
             , sExprE = SELit v
             }
         SSimpleCol ns col -> runExcept $ do
-            colDef <- liftEither $ lookUpCol ns col
+            colDef <- lookUpCol ns col
             return $ SqlExpr
                 { sExprType = sColType colDef
                 , sExprE = SECol ns col

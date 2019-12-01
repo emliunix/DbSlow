@@ -8,17 +8,15 @@ module Planner where
 -- ** sub-select
 
 import Data.List (find, intercalate)
+import Data.List.Index (ifind, indexed)
 import Data.Maybe (catMaybes)
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), when)
 import Control.Monad.Except (Except, runExcept, throwError, liftEither)
 import Control.Monad.State (State, evalState, get, modify)
 
 import Expr.Def
 import Def
 import Expr.TypeInfer (typeCheck)
-
-type Result t = Either String t
-type ExceptS = Except String
 
 -- For Plan Tree
 
@@ -27,7 +25,7 @@ data PlanTableStore = PlanTableStore
     }
 
 data TempSchema = TempSchema
-    { lookUpCol :: Maybe String -> String -> Result SqlColumn
+    { lookUpCol :: Maybe String -> String -> ExceptS (Int, SqlColumn)
     , toSchema :: Result Schema
     }
 
@@ -40,10 +38,10 @@ class TempSchemaAble s where
 instance TempSchemaAble Schema where
     toTempSchema s = TempSchema
         { lookUpCol = \optNs colName -> case optNs of
-            Nothing -> case find (\col -> sColName col == colName) $ schCols s of
-                Just col -> Right col
-                Nothing -> Left $ "column not found: " ++ colName
-            _ -> Left "namespace not allowed"
+            Nothing -> case ifind (\_ col -> sColName col == colName) $ schCols s of
+                Just icol -> return icol
+                Nothing -> throwError $ "column not found: " ++ colName
+            _ -> throwError "namespace not allowed"
         , toSchema = Right s
         }
 
@@ -60,20 +58,24 @@ instance TempSchemaAble PlanTableStore where
             _applyNs (ns, sch) =
                 fmap (\col -> col { sColName = ns ++ "." ++ (sColName col) }) $ schCols sch
 
-tblStoreLookUpCol :: PlanTableStore -> Maybe String -> String -> Result SqlColumn
+tblStoreLookUpCol :: PlanTableStore -> Maybe String -> String -> ExceptS (Int, SqlColumn)
 tblStoreLookUpCol store optNs colName =
     case optNs of
-        Just ns -> case find (\(ns', _) -> ns' == ns) $ planTables store of
-            Just nameSch -> case findColInSch nameSch of
-                Just (_, col) -> Right col
-                Nothing -> Left $ "column not found: " ++ (fmtColName optNs colName)
-        Nothing -> case catMaybes $ fmap findColInSch $ planTables store of
-            [] -> Left $ "column not found" ++ (fmtColName optNs colName)
-            [(_, col)] -> Right col
-            xs -> Left $ "ambiguous columns found: " ++ (intercalate ", " $ fmap (\(ns, _) -> ns ++ "." ++ colName) xs)
+        Just ns -> case ifind (\_ (ns', _) -> ns' == ns) $ tables of
+            Just (i, nameSch) -> case findColInSch nameSch of
+                Just (j, _, col) -> return (prefixLen i + j, col)
+                    where
+                Nothing -> throwError $ "column not found: " ++ (fmtColName optNs colName)
+                
+        Nothing -> case catMaybes $ fmap (\(i, e) -> fmap (\r -> (i, r)) $ findColInSch e) $ indexed tables of
+            [] -> throwError $ "column not found" ++ (fmtColName optNs colName)
+            [(i, (j, _, col))] -> return (prefixLen i + j, col)
+            xs -> throwError $ "ambiguous columns found: " ++ (intercalate ", " $ fmap (\(_, (_, ns, _)) -> ns ++ "." ++ colName) xs)
     where
+        tables = planTables store
+        prefixLen i = sum $ fmap length $ take i tables
         findColInSch (name, sch) =
-            fmap (\col -> (name, col)) $ find (\col -> sColName col == colName) $ schCols sch
+            fmap (\(i, col) -> (i, name, col)) $ ifind (\_ col -> sColName col == colName) $ schCols sch
         fmtColName optNs colName =
             case optNs of
                 Just ns -> ns ++ "." ++ colName
@@ -89,7 +91,7 @@ data SqlPlan'
     | SPFilter        SqlExpr SqlPlan
     | SPJoin          SqlExpr SqlPlan SqlPlan
     | SPSort          [(SqlColumn, SqlOrderBy)] SqlPlan
-    | SPLimit         Int SqlPlan
+    | SPLimit         Integer SqlPlan
     | SPTable         String
     | SPSingletonExpr SqlExpr
     deriving (Show)
@@ -147,8 +149,8 @@ buildPFrom opCtx clsFrom tblRepo =
         _fromTbl tbl optBinding = do
             case lookUpTable tblRepo tbl of
                 Nothing -> throwError $ "Table not found: " ++ tbl
-                Just sch -> return $ SqlPlan
-                                        { sPlanSchema = toTempSchema sch
+                Just tblDef -> return $ SqlPlan
+                                        { sPlanSchema = toTempSchema $ tblSchema tblDef
                                         , sPlanP = SPTable tbl
                                         }
 
@@ -156,18 +158,20 @@ buildPWhere :: OpContext -> SqlClause -> SqlPlan -> Result SqlPlan
 -- buildPWhere _ _ _ = Left "xx"
 buildPWhere opCtx cls src =
     runExcept $ do
-        schLookUpCol <- return $ lookUpCol $ sPlanSchema src
         expr <- _expr cls
         -- we can pre-check the existence of column refs in expr
         -- or we can do typeCheck directly and let it fail in the check
         -- exprCols <- return $ colsOfExpr expr
         -- colDefs <- mapM (\(optNs, col) -> liftEither $ schLookUpCol optNs col) exprCols
         exprTyped <- liftEither $ typeCheck schLookUpCol (lookUpOp opCtx) expr
+        when (sExprType exprTyped /= STBool) $
+            throwError $ "Where expression is not of type bool: " ++ (show expr)
         return $ SqlPlan
             { sPlanSchema = sPlanSchema src
             , sPlanP = SPFilter exprTyped src
             }
     where
+        schLookUpCol optNs colName = fmap snd $ (lookUpCol $ sPlanSchema src) optNs colName
         _expr cls =
             case cls of
                 SClsWhere expr -> return expr
@@ -178,7 +182,16 @@ buildPOrderBy _ _ = Left "xx"
 -- buildPOrderBy _ _ = Left "xx"
 
 buildPLimit :: SqlClause -> SqlPlan -> Result SqlPlan
-buildPLimit _ _ = Left "xx"
+buildPLimit cls src =
+    runExcept $ do
+        lim <- _lim cls
+        return $ SqlPlan
+            { sPlanSchema = sPlanSchema src
+            , sPlanP = SPLimit lim src
+            }
+    where
+        _lim (SClsLimit n) = return n
+        _lim _ = throwError "Internal Error: not a limit clause"
 
 buildPSelect :: OpContext -> SqlClause -> SqlPlan -> Result SqlPlan
 -- buildPSelect _ _ _ = Left "xx"
@@ -204,7 +217,7 @@ buildPSelect opCtx cls src =
             { sColName = n
             , sColType = t
             }
-        schLookUpCol = lookUpCol $ sPlanSchema src
+        schLookUpCol optNs colName = fmap snd $ (lookUpCol $ sPlanSchema src) optNs colName
         _sels :: SqlClause -> ExceptS [(Maybe String, SqlSimpleExpr)]
         _sels cls = case cls of
             SClsSelect sels -> return $ sels
@@ -231,9 +244,3 @@ buildPSelect opCtx cls src =
                         Just ns -> ns ++ "_" ++ colName
                         _ -> colName
                 _tryDirectColRef _ = Nothing
-
--- >>> :i (>=>)
--- (>=>) :: Monad m => (a -> m b) -> (b -> m c) -> a -> m c
---   	-- Defined in ‘Control.Monad’
--- infixr 1 >=>
---
