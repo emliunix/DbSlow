@@ -13,7 +13,9 @@ import Control.Monad.State.Lazy (StateT, lift, get, put, runStateT)
 import Data.Either (rights)
 import Data.List (intersperse)
 
-import Def (Row, Schema)
+import Def (Row, Schema, SqlType (..))
+
+import SchemaInfer (inferRow)
 
 --
 
@@ -91,7 +93,33 @@ prnCsv fp = do
         prnRow :: Vector ByteString -> IO ()
         prnRow row = putStrLn $ BS.unpack $ BS.concat $ intersperse "," $ toList row
 
+
 -- >>> test
 -- John,27
 -- Jane,28
+--
+
+inferType :: FilePath -> IO [SqlType]
+inferType fp = do
+    rc <- readCsv fp
+    (ts, rc) <- runStateT consumeRows rc
+    closeReadCsv rc
+    return ts
+    where
+        initTypes = repeat STUnknown
+        -- consumeRows :: StateT ReadCsv IO [SqlType]
+        consumeRows = inferRowTypes 0 initTypes
+        -- inferRowTypes :: Int -> [SqlType] -> StateT ReadCsv IO [SqlType]
+        inferRowTypes i types = 
+            if i == 100 then
+                return types
+            else do
+                r <- nextRow
+                case r of
+                    Just r -> do
+                        inferRowTypes (i+1) (inferRow types (toList r))
+                    Nothing -> return types
+
+-- >>> inferType "/home/liu/play/Popular_Baby_Names.csv"
+-- [STInt,STString,STString,STString,STDouble,STInt]
 --
