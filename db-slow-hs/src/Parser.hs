@@ -127,7 +127,20 @@ qualifiedColIdent = do
     return $ ids ++ [idn]
 
 parseLit :: Parser SqlSimpleExpr
-parseLit = (\i -> SSimpleLit $ SVInt i) <$> integer
+parseLit = parseLitDouble <|> parseLitInt <|> parseLitBool <|> parseLitStr <?> "literal"
+parseLitInt :: Parser SqlSimpleExpr
+parseLitInt = (\i -> SSimpleLit $ SVInt i) <$> integer <?> "vInt"
+parseLitDouble :: Parser SqlSimpleExpr
+parseLitDouble = (\i -> SSimpleLit $ SVDouble i) <$> double <?> "vDouble"
+parseLitBool :: Parser SqlSimpleExpr
+parseLitBool = token $ ((pTrue *> return vTrue) <|> (pFalse *> return vFalse)) <?> "vBool"
+    where
+        pTrue = try $ keyword "true"
+        pFalse = try $ keyword "false"
+        vTrue = SSimpleLit $ SVBool True
+        vFalse = SSimpleLit $ SVBool False
+parseLitStr :: Parser SqlSimpleExpr
+parseLitStr = (\i -> SSimpleLit $ SVString i) <$> stringLiteral' <?> "vStr"
 
 parseCol :: Parser SqlSimpleExpr
 parseCol =

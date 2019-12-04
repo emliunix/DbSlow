@@ -23,7 +23,6 @@ dependencies:
 - base >= 4.7 && < 5
 - parsers
 - trifecta
-- extensible-effects
 - fused-effects
 - mtl
 - directory
@@ -31,6 +30,8 @@ dependencies:
 - vector
 - bytestring
 - ilist
+- conduit
+- conduit-extra
 
 library:
   source-dirs: src

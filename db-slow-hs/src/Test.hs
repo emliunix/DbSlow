@@ -93,7 +93,10 @@ myTest sql =
 -- "SVDouble 3.3, SVString \"strval1\", SVInt 3"
 --
 
--- >>> myTest "select a, c from test where a > 2"
--- "SVDouble 2.2, SVString \"strval1\", SVInt 2"
--- "SVDouble 3.3, SVString \"strval1\", SVInt 3"
+-- >>> myTest "select a, c from test where a > 1"
+-- Where expression is not of type bool: SSimpleCol Nothing "a"
+--
+
+-- >>> parseString parseSelect mempty "select a, c from test where a > 1"
+-- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleCol Nothing "a"),(Nothing,SSimpleCol Nothing "c")],SClsFrom (SFromTable "test" Nothing),SClsWhere (SSimpleCol Nothing "a")])
 --
