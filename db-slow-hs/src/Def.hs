@@ -140,7 +140,7 @@ data SqlSimpleExpr
     deriving (Show)
 
 data SqlStmt
-    = SStmtAttach String (Maybe String) -- attach 'path/to/data.csv' [AS tblCsv]
+    = SStmtAttach String String -- attach tblCsv csv 'path/to/data.csv'
     | SStmtTable String -- table someTbl
     | SStmtSingleSelect SqlClause -- single SClsSelect exprs statement
     | SStmtSelect [SqlClause] -- select

@@ -127,7 +127,7 @@ qualifiedColIdent = do
     return $ ids ++ [idn]
 
 parseLit :: Parser SqlSimpleExpr
-parseLit = parseLitDouble <|> parseLitInt <|> parseLitBool <|> parseLitStr <?> "literal"
+parseLit = (foldl1 (<|>) $ fmap try [parseLitDouble, parseLitInt, parseLitBool, parseLitStr]) <?> "literal"
 parseLitInt :: Parser SqlSimpleExpr
 parseLitInt = (\i -> SSimpleLit $ SVInt i) <$> integer <?> "vInt"
 parseLitDouble :: Parser SqlSimpleExpr
@@ -251,13 +251,6 @@ parseSelect = try $ do
             keyword "as"
             token identifier
 
--- >>> parseString parseSelect mempty "SelEct 1 + fun(1, 2, 3) as t"
--- Success (SStmtSelect [SClsSelect [(Just "t",SSimpleApp Plus [SSimpleLit (SVInt 1),SSimpleApp (Fun "fun") [SSimpleLit (SVInt 1),SSimpleLit (SVInt 2),SSimpleLit (SVInt 3)]])]])
---
--- >>> parseString parseSelect mempty "sELect 1 + 1"
--- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleApp Plus [SSimpleLit (SVInt 1),SSimpleLit (SVInt 1)])]])
---
-
 parseFrom :: Parser SqlClause
 parseFrom = try $ do
     keyword "from"
@@ -281,18 +274,6 @@ parseFrom = try $ do
         _subFrom = _tbl <|> _subSelect
         -- _join = 
 
--- >>> parseString parseFrom mempty "from a as t"
--- Success (SClsFrom (SFromTable "a" (Just "t")))
---
-
--- >>> parseString parseSelect mempty "select t.a from b as t"
--- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleCol "t.a"),(Nothing,SSimpleCol "from"),(Just "t",SSimpleCol "b")]])
---
-
--- >>> parseString parseFrom mempty "from (select t.a from b as t) AS t1"
--- Success (SClsFrom (SFromSubSelect (SStmtSelect [SClsSelect [(Nothing,SSimpleCol "t.a"),(Nothing,SSimpleCol "from"),(Just "t",SSimpleCol "b")]]) "t1"))
---
-
 parseWhere :: Parser SqlClause
 parseWhere = try $ do
     keyword "where"
@@ -315,24 +296,21 @@ parseOrderBySpec = try $ do
         return SOrderASC
     return (col, ord)
 
--- >>> parseString parseOrderBy mempty "order by a.t asc, b.t desc"
--- Success (SClsOrderBy [("a.t",SOrderASC),("b.t",SOrderDESC)])
---
-
 parseLimit :: Parser SqlClause
 parseLimit = try $ do
     keyword "limit"
     n <- integer
     return $ SClsLimit n
 
--- >>> parseString parseSelect mempty "select * from a where c > 0 and b < 1 order by d limit 100"
--- Success (SStmtSelect [SClsSelect [(Nothing,SSimpleCol Nothing "*")],SClsFrom (SFromTable "a" Nothing),SClsWhere (SSimpleApp And [SSimpleApp GreaterThan [SSimpleCol Nothing "c",SSimpleLit (SVInt 0)],SSimpleApp LessThan [SSimpleCol Nothing "b",SSimpleLit (SVInt 1)]]),SClsOrderBy [("d",SOrderASC)],SClsLimit 100])
---
+-- # Attach Csv Parser #
 
--- >>> parseString parseExpr mempty "c > 0 and b < 1 order"
--- Success (SSimpleApp And [SSimpleApp GreaterThan [SSimpleCol "c",SSimpleLit (SVInt 0)],SSimpleApp LessThan [SSimpleCol "b",SSimpleLit (SVInt 1)]])
---
+parseAttach :: Parser SqlStmt
+parseAttach = try $ do
+    keyword "attach"
+    tbl <- token identifier
+    keyword "csv"
+    path <- stringLiteral'
+    return $ SStmtAttach tbl path
 
--- >>> parseString ((try $ keyword "or") <|> return "xx") mempty "order"
--- Success "xx"
---
+parseStmt :: Parser SqlStmt
+parseStmt = (parseSelect <|> parseAttach) <* symbol ";" <* eof

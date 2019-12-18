@@ -32,6 +32,8 @@ dependencies:
 - ilist
 - conduit
 - conduit-extra
+- haskeline
+- transformers
 
 library:
   source-dirs: src
