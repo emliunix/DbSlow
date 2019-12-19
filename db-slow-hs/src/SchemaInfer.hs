@@ -1,9 +1,12 @@
-
+{-# LANGUAGE ExistentialQuantification
+           , OverloadedStrings
+           #-}
 module SchemaInfer where
 
 --
 
-import Expr.Def (SqlType (..))
+import Def (Schema)
+import Expr.Def (SqlType (..), SqlVal (..))
 import Text.Parser.Token (whiteSpace, integer, double)
 import Text.Parser.Char (letter)
 import Text.Parser.Combinators (many, eof, try)
@@ -25,33 +28,65 @@ type IsTypeFn = ByteString -> Bool
 isUnknown :: IsTypeFn
 isUnknown _ = False
 
+-- >> infixl 1
+-- <|> infxil 3
+-- <$> infixl 4
+-- <* infixl 4
+
+pEof :: forall a. Parser (Maybe a)
+pEof = eof *> (return Nothing)
+
+decodeInt :: ByteString -> Maybe SqlVal
+decodeInt s =
+    case parseByteString (whiteSpace >> pInt <|> pEof) mempty s of
+        Success (Just v) -> Just $ SVInt v
+        Success Nothing -> Just SVNull
+        Failure _ -> Nothing
+    where
+        pInt = Just <$> integer <* whiteSpace <* eof
+
+decodeDouble :: ByteString -> Maybe SqlVal
+decodeDouble s =
+    case parseByteString (whiteSpace >> pDoubleOrInt <|> pEof) mempty s of
+        Success (Just v) -> Just $ SVDouble v
+        Success Nothing -> Just SVNull
+        Failure _ -> Nothing
+    where
+        pDoubleOrInt = Just <$> ((try double) <|> (fromInteger <$> try integer)) <* whiteSpace <* eof
+
+decodeBool :: ByteString -> Maybe SqlVal
+decodeBool s =
+    case parseByteString (whiteSpace >>( Just <$> pBool <* whiteSpace <* eof) <|> pEof) mempty s of
+        Success (Just v) -> Just $ SVBool v
+        Success Nothing -> Just SVNull
+        Failure _ -> Nothing
+        where
+            pBool = do
+                s <- many letter
+                s <- return $ [toLower c | c <- s]
+                if s `elem` ["true", "t", "yes"] then
+                    return True
+                else if s `elem` ["false", "f", "no"] then
+                    return False
+                else
+                    fail "not a bool"
+
+decodeString :: ByteString -> Maybe SqlVal
+decodeString s = Just . SVString $ B.unpack s
+
+mkIsTypeFn :: (ByteString -> Maybe SqlVal) -> IsTypeFn
+mkIsTypeFn f s = case f s of
+    Just _ -> True
+    Nothing -> False
+
 isInt :: IsTypeFn
-isInt s = case parseByteString (whiteSpace >> (integer >> whiteSpace >> eof) <|> eof) mempty s of
-    Success _ -> True
-    Failure _ -> False
+isInt = mkIsTypeFn decodeInt
 
 isDouble :: IsTypeFn
-isDouble s = case parseByteString (whiteSpace >> (tryDouble <|> tryInteger <|> eof)) mempty s of
-    Success _ -> True
-    Failure _ -> False
-    where
-        tryInteger = try (integer >> whiteSpace >> eof)
-        tryDouble = try (double >> whiteSpace >> eof)
+isDouble = mkIsTypeFn decodeDouble
 
 isBool :: IsTypeFn
-isBool s = case parseByteString (whiteSpace >>( pBool >> whiteSpace >> eof) <|> eof) mempty s of
-    Success _ -> True
-    Failure _ -> False
-    where
-        pBool = do
-            s <- many letter
-            s <- return $ [toLower c | c <- s]
-            if s `elem` ["true", "t", "yes"] then
-                return True
-            else if s `elem` ["false", "f", "no"] then
-                return False
-            else
-                fail "not a bool"
+isBool = mkIsTypeFn decodeBool
 
 isString :: IsTypeFn
 isString _ = True
@@ -91,3 +126,19 @@ infer rows@(r:_) =
     foldl inferRow initialTypes rows
     where
         initialTypes = take (length r) $ repeat STUnknown
+
+decodeRow :: [SqlType] -> [ByteString] -> [SqlVal]
+decodeRow sch bs = map (\(t, v) -> decodeCell t v) $ zip sch bs
+
+decodeCell :: SqlType -> ByteString -> SqlVal
+decodeCell t v =
+    case (t, v) of
+        (STString, "") -> SVString ""
+        (_, "") -> SVNull
+        (STInt, v) -> unwrap $ decodeInt v
+        (STDouble, v) -> unwrap $ decodeDouble v
+        (STBool, v) -> unwrap $ decodeBool v
+        (STString, v) -> SVString $ B.unpack v
+    where
+        unwrap v = case v of
+            Just v -> v

@@ -7,7 +7,7 @@ import System.IO (hIsEOF, hClose, openFile, IOMode (..), Handle)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Char8 (hGetSome)
-import Data.Csv.Incremental (Parser (..), decode, HasHeader (..))
+import Data.Csv.Incremental (Parser (..), decode, HasHeader (..), decodeHeader, HeaderParser (..))
 import Data.Vector (Vector, toList)
 import Control.Monad.State.Lazy (StateT, lift, get, put, runStateT)
 import Data.Either (rights)
@@ -93,12 +93,6 @@ prnCsv fp = do
         prnRow :: Vector ByteString -> IO ()
         prnRow row = putStrLn $ BS.unpack $ BS.concat $ intersperse "," $ toList row
 
-
--- >>> test
--- John,27
--- Jane,28
---
-
 inferType :: FilePath -> IO [SqlType]
 inferType fp = do
     rc <- readCsv fp
@@ -119,6 +113,21 @@ inferType fp = do
                     Just r -> do
                         inferRowTypes (i+1) (inferRow types (toList r))
                     Nothing -> return types
+
+readHeader :: FilePath -> IO (Vector ByteString)
+readHeader fp = do
+    hd <- openFile fp ReadMode
+    case decodeHeader of
+        PartialH k -> feedMore k hd
+    where
+        -- feedMore :: (ByteString -> HeaderParser ByteString) -> Handle -> IO (Vector ByteString)
+        feedMore k hd = do
+            bs <- hGetSome hd 4096
+            case k bs of
+                DoneH header _ -> do
+                    hClose hd
+                    return header
+                PartialH k -> feedMore k hd
 
 -- >>> inferType "/home/liu/play/Popular_Baby_Names.csv"
 -- [STInt,STString,STString,STString,STDouble,STInt]

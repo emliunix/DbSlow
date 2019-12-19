@@ -11,6 +11,7 @@ import Stage.TestDataStage (mkTestDataStage)
 import Stage.BuildStage (buildStage)
 import Parser (parseSelect, parseExpr, parseFactor, parseCol, mkOpParser, addLeftBinaryParser, parseAttach)
 import Text.Trifecta
+import Data.List (find)
 
 -- type ExceptS = Except String
 
@@ -57,10 +58,10 @@ testTable = SqlTable
         ]
     }
 
-tblRepo = SqlTableRepo
-    { lookUpTable = \tbl -> case tbl of
-        "test" -> Just testTable
-        _ -> Nothing
+tblRepo = mkTblRepo [testTable]
+mkTblRepo tbls = SqlTableRepo
+    { lookUpTable = \tbl -> find (\t -> tblName t == tbl) tbls
+    , addTable = \tbl -> mkTblRepo (tbl:tbls)
     }
 
 -- buildPlanTree :: [SqlClause] -> OpContext -> SqlTableRepo -> Result SqlPlan

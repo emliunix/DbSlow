@@ -64,7 +64,7 @@ data SqlTable = SqlTable
     , tblStage :: Stage
     }
 
-data SqlTableRepo = SqlTableRepo { lookUpTable :: String -> Maybe SqlTable }
+data SqlTableRepo = SqlTableRepo { lookUpTable :: String -> Maybe SqlTable, addTable :: SqlTable -> SqlTableRepo }
 
 type Row = [SqlVal]
 

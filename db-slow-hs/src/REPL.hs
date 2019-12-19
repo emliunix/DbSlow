@@ -6,6 +6,9 @@ module REPL where
 
 import Data.List (intercalate)
 import Data.Functor.Identity (Identity (..))
+import Data.Vector (Vector, toList)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as B
 import Control.Monad (forever, forM_)
 import Control.Monad.Trans.Class (MonadTrans (..))
 import Control.Monad.Trans.State.Strict (StateT, evalStateT, modify, get)
@@ -16,11 +19,24 @@ import Text.Trifecta (parseString, Result (..))
 
 import System.Console.Haskeline
 
-import Def (Row, SqlStmt (..), SqlVal (..), SqlClause, SqlTableRepo, Stage (..), cursorToList)
+import Def
+    ( Row
+    , SqlStmt (..)
+    , SqlVal (..)
+    , SqlClause
+    , SqlTableRepo (..)
+    , Stage (..)
+    , cursorToList
+    , SqlTable (..)
+    , SqlColumn (..)
+    , Schema (..)
+    )
 import Parser (parseStmt)
 import Planner (buildPlanTree)
 import Stage.BuildStage (buildStage)
+import Stage.CsvFileStage (mkCsvFileStage)
 import PrimOps (primOpContext)
+import ReadRow2 (inferType, readHeader)
 
 import qualified Test
 
@@ -51,6 +67,7 @@ repl = runInputT defaultSettings (evalStateT loop initialContext)
                 Just ipt ->
                     case ipt of
                         "quit" -> setExit
+                        "help" -> lift $ outputStrLn helpMsg
                         _ -> processInput ipt
                 Nothing -> do
                     lift $ outputStr helpMsg
@@ -92,6 +109,7 @@ pStmt s = case parseString parseStmt mempty s of
 evalStmt :: forall m. MonadException m => SqlStmt -> ExceptT String (StateT Context (InputT m)) EvalResult
 evalStmt stmt = case stmt of
     SStmtSelect clauses -> evalSelect clauses
+    SStmtAttach tbl fp -> evalAttach tbl fp
 
 evalSelect :: forall m. MonadException m => [SqlClause] -> ExceptT String (StateT Context (InputT m)) EvalResult
 evalSelect clauses = do
@@ -100,7 +118,7 @@ evalSelect clauses = do
     stg <- Exc.mapExceptT (\x -> return $ runIdentity x) $ buildStage tblRepo plan
     cur <- Exc.lift $ liftIO $ stgNewCursor stg
     rows <- Exc.lift $ liftIO $ cursorToList cur
-    return $ EvalResult rows (show $ SStmtSelect clauses)
+    return $ EvalResult rows "" -- (show $ SStmtSelect clauses)
     where
         getTblRepo = do
             ctx <- get
@@ -115,3 +133,31 @@ formatRow row =
         formatCell (SVBool v) = show v
         formatCell (SVString v) = "\"" ++ v ++ "\""
         formatCell SVNull = "NULL"
+
+evalAttach :: forall m. MonadException m => String -> String -> ExceptT String (StateT Context m) EvalResult
+evalAttach tbl_name fp = do
+    header <- Exc.lift $ liftIO $ readHeader fp
+    types <- Exc.lift $ liftIO $ inferType fp
+    tbl <- return $ mkTbl tbl_name header types
+    Exc.lift $ addTableToCtx tbl
+    return $ EvalResult
+        { rows = []
+        , msg = "Added csv table \"" ++ tbl_name ++ "\" :: " ++ (show $ (schCols . tblSchema) tbl)
+        }
+    where
+        mkTbl tbl header types =
+            SqlTable
+                { tblName = tbl
+                , tblSchema = Schema
+                    { schCols = mkCols header types
+                    , schName = tbl
+                    }
+                , tblStage = mkCsvFileStage fp types
+                }
+        addTableToCtx tbl =
+            modify $ \ctx ->
+                let repo = tblRepo ctx in
+                    ctx { tblRepo = addTable repo tbl }
+        mkCols header' types =
+            let header = map B.unpack $ toList header' in
+                map (\(n, t) -> SqlColumn { sColName = n, sColType = t }) $ zip header types

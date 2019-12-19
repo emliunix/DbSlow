@@ -5,6 +5,7 @@ import Control.Monad.Except (throwError)
 import Planner (SqlPlan (..), SqlPlan' (..), TempSchema (..))
 import Stage.FilterStage (mkFilterStage)
 import Stage.ProjStage (mkProjStage)
+import Stage.LimitStage (mkLimitStage)
 import Expr.Def (SqlExpr)
 import Def
 
@@ -22,6 +23,9 @@ buildStage tblRepo plan =
                 Just tblDef -> do
                     return $ tblStage tblDef
                 Nothing -> throwError $ "Table not found: " ++ tbl
+        SPLimit n subplan -> do
+            subStage <- buildStage tblRepo subplan
+            return $ mkLimitStage n subStage
     where
         getLookUpCol = lookUpCol . sPlanSchema
         plan' = sPlanP plan
